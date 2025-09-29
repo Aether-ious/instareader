@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insta-Reader</title>
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#ffffff">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+        }
+        .card-container {
+            scroll-snap-type: y mandatory;
+        }
+        .card {
+            scroll-snap-align: start;
+            min-height: calc(100vh - 200px); /* Adjust based on header/footer height */
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        .progress-bar-fill {
+            transition: width 0.5s ease-in-out;
+        }
+        /* Chat Modal Transition */
+        #chat-modal.hidden {
+            transform: translateY(100%);
+        }
+        #chat-modal {
+            transition: transform 0.3s ease-out;
+        }
+        /* Talk button animation */
+        .is-listening {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        /* Audio playback highlight */
+        .is-playing {
+             box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5);
+             border-color: rgba(59, 130, 246, 0.7);
+        }
+        /* AI Typing Indicator */
+        .typing-indicator span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #9ca3af;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+        /* Custom Slider */
+        input[type=range] {
+          -webkit-appearance: none;
+          width: 100%;
+          background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          height: 20px;
+          width: 20px;
+          border-radius: 50%;
+          background: #3b82f6;
+          cursor: pointer;
+          margin-top: -8px; 
+          box-shadow: 0 0 2px #000;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+          width: 100%;
+          height: 4px;
+          cursor: pointer;
+          background: #d1d5db;
+          border-radius: 5px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <!-- Main Application Container -->
+    <div id="app" class="max-w-md mx-auto h-screen bg-white shadow-2xl shadow-gray-300/50 flex flex-col overflow-hidden">
+
+        <!-- ===== Setup Screen ===== -->
+        <div id="setup-screen" class="flex flex-col h-full p-6 text-center">
+            <header class="mb-6">
+                <h1 class="text-4xl font-bold text-gray-900">Insta-Reader</h1>
+                <p class="text-gray-500 mt-2">Make reading addictive. Select books to begin.</p>
+            </header>
+            
+             <div class="mb-6">
+                <p class="text-sm font-semibold text-gray-600 mb-3 text-left">UPLOAD YOUR BOOKS</p>
+                <div class="bg-gray-100 p-4 rounded-xl text-center">
+                   <button id="upload-btn" class="w-full bg-white border-2 border-dashed border-gray-300 text-gray-500 font-semibold py-3 px-4 rounded-xl hover:bg-gray-50 transition-all">
+                        Select PDF or ePub files...
+                   </button>
+                   <input type="file" id="file-input" multiple accept=".pdf,.epub" class="hidden">
+                   <div id="file-list" class="text-left text-sm text-gray-600 mt-3"></div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <p class="text-sm font-semibold text-gray-600 mb-3 text-left">READING DEPTH</p>
+                <div id="density-selector" class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full bg-gray-200 rounded-xl p-1">
+                    <button data-density="overview" class="density-btn rounded-lg py-2 px-2 text-sm font-semibold transition-all">Overview</button>
+                    <button data-density="student" class="density-btn rounded-lg py-2 px-2 text-sm font-semibold transition-all">Student</button>
+                    <button data-density="expert" class="density-btn rounded-lg py-2 px-2 text-sm font-semibold transition-all">Expert</button>
+                    <button data-density="researcher" class="density-btn rounded-lg py-2 px-2 text-sm font-semibold transition-all">Researcher</button>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <p class="text-sm font-semibold text-gray-600 mb-3 text-left">FEED LENGTH</p>
+                <div class="bg-gray-100 p-4 rounded-xl">
+                    <input type="range" id="feed-length-slider" min="0" max="3" value="1" class="w-full">
+                    <div class="flex justify-between text-xs text-gray-500 mt-2 px-1">
+                        <span>Snack</span>
+                        <span>Short</span>
+                        <span>Medium</span>
+                        <span>Deep Dive</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-grow overflow-y-auto">
+                <p class="text-sm font-semibold text-gray-600 mb-4 text-left">PRE-LOADED LIBRARY (FOR DEMO)</p>
+                <div id="book-selection" class="space-y-3">
+                    <!-- Book options will be injected here by JS -->
+                </div>
+            </div>
+
+            <div class="mt-auto pt-6">
+                <div id="selection-error" class="text-red-500 text-sm mb-3 h-5"></div>
+                <button id="start-reading-btn" class="w-full bg-blue-500 text-white font-bold py-4 px-4 rounded-xl shadow-lg shadow-blue-500/30 hover:bg-blue-600 transition-all focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:bg-gray-300 disabled:shadow-none">
+                    Start Reading
+                </button>
+            </div>
+        </div>
+
+        <!-- ===== Reader Screen ===== -->
+        <div id="reader-screen" class="hidden flex-col h-full">
+            <header class="p-4 border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                 <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-xl font-bold text-gray-900">Your Feed</h2>
+                    <button id="change-books-btn" class="text-sm text-blue-500 font-semibold">Change</button>
+                 </div>
+                <div id="progress-bars" class="space-y-2">
+                    <!-- Progress bars will be injected here -->
+                </div>
+            </header>
+
+            <main id="feed" class="flex-grow overflow-y-auto card-container pb-24"> <!-- Padding bottom for footer -->
+                <!-- Cards will be injected here -->
+            </main>
+            <div id="loading-indicator" class="text-center p-8 hidden">
+                <svg class="animate-spin h-8 w-8 text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+             <!-- Action Footer -->
+            <footer class="absolute bottom-0 left-0 right-0 bg-white/80 backdrop-blur-sm border-t border-gray-200 p-4 z-20">
+                <div class="flex justify-around items-center">
+                    <button id="audio-mode-btn" class="p-3 rounded-full hover:bg-gray-200 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                    </button>
+                    <button id="talk-btn" class="p-4 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                    </button>
+                    <button id="chat-btn" class="p-3 rounded-full hover:bg-gray-200 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                    </button>
+                </div>
+            </footer>
+        </div>
+        
+        <!-- ===== Chat Modal ===== -->
+        <div id="chat-modal" class="absolute top-0 left-0 right-0 bottom-0 bg-white z-30 flex flex-col transform translate-y-full hidden">
+            <header class="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                <h2 class="text-xl font-bold text-gray-900">Ask a Question</h2>
+                <button id="close-chat-btn" class="p-2 rounded-full hover:bg-gray-200">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </header>
+            <div id="chat-history" class="flex-grow p-4 overflow-y-auto space-y-4">
+                 <!-- Chat messages will be injected here -->
+                 <div class="flex justify-center">
+                    <p class="bg-gray-100 text-gray-500 text-xs font-semibold px-3 py-1 rounded-full">Ask anything about the current card!</p>
+                 </div>
+            </div>
+            <footer class="p-4 border-t border-gray-200 flex-shrink-0">
+                <form id="chat-form" class="flex items-center space-x-2">
+                    <input id="chat-input" type="text" placeholder="Type your question..." class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400" autocomplete="off">
+                    <button type="submit" class="bg-blue-500 text-white p-3 rounded-xl shadow-md hover:bg-blue-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                    </button>
+                </form>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        // --- PWA Service Worker Registration ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+
+        // --- MOCK DATA & CONFIG ---
+        const MOCK_BOOKS = {
+            '1': {
+                title: 'Klara and the Sun',
+                author: 'Kazuo Ishiguro',
+                color: 'bg-orange-500',
+                chapters: Array.from({ length: 8 }, (_, i) => ({
+                    title: `Part ${i + 1}`,
+                    overview: { summary: `This is a high-level summary for Part ${i + 1} of Klara and the Sun, discussing her ongoing observations and relationship with Josie.`, bullets: ['Key event A.', 'Character development B.'] },
+                    student: { summary: `In Part ${i + 1}, Klara's understanding of human emotions deepens. We see her grapple with concepts like loneliness and hope through her interactions at Josie's home.`, bullets: ['Thematic exploration of hope.', 'Klara\'s evolving consciousness.'] },
+                    expert: { summary: `Ishiguro uses Part ${i + 1} to further deconstruct the human-AI dichotomy. Klara’s unwavering loyalty, even when faced with complex human frailties, serves as a critique of modern transactional relationships.`, bullets: ['Symbolism of the "Cootings Machine".', 'Critique of social stratification.'] },
+                    researcher: { summary: `Part ${i + 1} continues the exploration of a bounded consciousness model. Klara’s logic is tested against the irrationality of human love and loss, posing questions about whether empathy can be a purely computational process. Her actions can be analyzed via a game-theoretic lens of optimal strategy for a dependent agent.`, bullets: ['Bounded rationality in AI.', 'Game theory and altruism.'] }
+                }))
+            },
+            '2': {
+                title: 'The Man Who Mistook His Wife for a Hat',
+                author: 'Oliver Sacks',
+                color: 'bg-indigo-500',
+                chapters: Array.from({ length: 10 }, (_, i) => ({
+                    title: `Case Study #${i + 2}`,
+                    overview: { summary: `Sacks describes another patient with a peculiar neurological condition, highlighting the brain's fragility and resilience.`, bullets: ['New patient condition.', 'Unexpected symptom.'] },
+                    student: { summary: `This case study focuses on a patient with a specific form of agnosia or amnesia, explaining the underlying neurological basis for their symptoms and how they cope in daily life.`, bullets: ['Diagnosis explained.', 'Coping mechanisms.'] },
+                    expert: { summary: `Sacks details a clinical presentation consistent with damage to a specific cortical region (e.g., parietal lobe for spatial neglect). The narrative explores the subjective experience of the deficit, bridging clinical neurology with humanistic storytelling.`, bullets: ['Localization of brain function.', 'Phenomenological account.'] },
+                    researcher: { summary: `This case provides further evidence for the modularity of mind. The patient's specific deficit isolates a cognitive function, allowing for inferences about its neural substrates. It challenges holistic brain models and supports a network-based understanding of cognition.`, bullets: ['Modularity of Mind vs. Holism.', 'Inference on neural substrates.'] }
+                }))
+            },
+            '3': {
+                title: 'Meditations',
+                author: 'Marcus Aurelius',
+                color: 'bg-amber-600',
+                chapters: Array.from({ length: 12 }, (_, i) => ({
+                    title: `Book ${i + 3}`,
+                    overview: { summary: `Aurelius offers more reflections on duty, mortality, and maintaining inner peace by focusing on reason and virtue.`, bullets: ['On duty and service.', 'On accepting death.'] },
+                    student: { summary: `This book delves deeper into the Stoic practice of viewing events objectively, without adding negative judgments. Aurelius reminds himself to act for the common good and not be swayed by desire for fame or pleasure.`, bullets: ['Objective representation (phantasia kataleptike).', 'The "view from above".'] },
+                    expert: { summary: `The repetitive nature of the spiritual exercises (askēsis) in this book demonstrates the Stoic emphasis on constant practice. Aurelius works to internalize the dichotomy of control, re-scripting his automatic emotional responses through logical analysis.`, bullets: ['Practice of askēsis.', 'Internalizing the dichotomy of control.'] },
+                    researcher: { summary: `This text serves as a primary source for Stoic psychological therapeutics. The constant self-correction can be analyzed as an early form of cognitive restructuring, akin to modern CBT, aimed at modifying the core beliefs (dogmata) that lead to emotional disturbance (pathē).`, bullets: ['Precursor to Cognitive Behavioral Therapy (CBT).', 'Modification of dogmata.'] }
+                }))
+            },
+            '4': {
+                title: 'Interplay of Brain Networks',
+                author: 'Fictional Research Paper',
+                color: 'bg-cyan-500',
+                chapters: Array.from({ length: 8 }, (_, i) => ({
+                    title: ['Methods', 'Results', 'Discussion', 'Limitations', 'Conclusion', 'Appendix A', 'Appendix B', 'References'][i],
+                    overview: { summary: `The paper details the experiment's design, findings, and implications for understanding how brain networks operate.`, bullets: ['How the study was done.', 'What was found.'] },
+                    student: { summary: `The ${['Methods', 'Results', 'Discussion'][i] || 'Conclusion'} section explains the core findings, showing how the Salience Network activity predicts switches between Default Mode and Executive Control networks during specific tasks.`, bullets: ['fMRI task design.', 'Key statistical results.'] },
+                    expert: { summary: `The ${['Methods', 'Results', 'Discussion'][i] || 'Conclusion'} section presents time-series analysis from fMRI data, demonstrating a causal relationship between activity in the anterior insula and subsequent changes in DMN/ECN connectivity, supporting the triple network model.`, bullets: ['Granger causality analysis.', 'Support for the triple network model.'] },
+                    researcher: { summary: `Data analysis reveals statistically significant lagged correlations between BOLD signals in the Salience Network and subsequent functional connectivity changes. The discussion frames these findings within the context of predictive coding and their implications for understanding attentional deficits.`, bullets: ['BOLD signal analysis.', 'Implications for predictive coding theories.'] }
+                }))
+            },
+            '5': {
+                title: 'Atmospheric Dynamics',
+                author: 'Fictional Physics Textbook',
+                color: 'bg-slate-500',
+                chapters: Array.from({ length: 10 }, (_, i) => ({
+                    title: `Chapter ${i + 2}: Geostrophic & Gradient Flow`,
+                    overview: { summary: `This chapter simplifies the main equations to describe large-scale, balanced atmospheric flows like the jet stream.`, bullets: ['Geostrophic balance.', 'Pressure vs. Coriolis force.'] },
+                    student: { summary: `By assuming a balance between the pressure gradient force and the Coriolis force, we arrive at the geostrophic wind equation. This is a powerful approximation for understanding weather maps and large-scale atmospheric circulation.`, bullets: ['Pressure Gradient Force (PGF).', 'Geostrophic wind approximation.'] },
+                    expert: { summary: `The geostrophic and gradient wind approximations are derived from the horizontal momentum equation. We analyze the Rossby number (Ro) to determine the conditions under which these balances are valid, and explore ageostrophic components that are crucial for vertical motion.`, bullets: ['Rossby number (Ro) scaling.', 'Ageostrophic circulation.'] },
+                    researcher: { summary: `The geostrophic momentum approximation simplifies the horizontal momentum equation to $f\\mathbf{k} \\times \\mathbf{u}_g = -\\frac{1}{\\rho}\\nabla_p$. This foundational concept allows for the filtering of acoustic and gravity waves from the primitive equations, a key step in developing stable numerical models and understanding quasi-balanced dynamics.`, bullets: ['Geostrophic momentum equation.', 'Quasi-geostrophic theory.'] }
+                }))
+            },
+        };
+        const ENGAGEMENT_CARDS = [
+            { type: 'fun_fact', title: 'Fun Fact', text: 'A group of flamingos is called a "flamboyance".', color: 'bg-purple-100', textColor: 'text-purple-800' },
+            { type: 'fun_fact', title: 'Did You Know?', text: 'Honey never spoils. Archaeologists have found pots of honey in ancient Egyptian tombs that are over 3,000 years old and still perfectly edible.', color: 'bg-teal-100', textColor: 'text-teal-800' },
+            { type: 'quick_question', title: 'Quick Question', text: 'Which planet in our solar system is known as the "Red Planet"?', answer: 'Mars', color: 'bg-orange-100', textColor: 'text-orange-800' },
+        ];
+        const FEED_LENGTHS = [10, 20, 35, 50];
+
+        // --- DOM Elements ---
+        const setupScreen = document.getElementById('setup-screen');
+        const readerScreen = document.getElementById('reader-screen');
+        const bookSelectionContainer = document.getElementById('book-selection');
+        const densitySelector = document.getElementById('density-selector');
+        const feedLengthSlider = document.getElementById('feed-length-slider');
+        const startReadingBtn = document.getElementById('start-reading-btn');
+        const selectionError = document.getElementById('selection-error');
+        const feed = document.getElementById('feed');
+        const progressBarsContainer = document.getElementById('progress-bars');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const changeBooksBtn = document.getElementById('change-books-btn');
+        const chatBtn = document.getElementById('chat-btn');
+        const audioModeBtn = document.getElementById('audio-mode-btn');
+        const talkBtn = document.getElementById('talk-btn');
+        const chatModal = document.getElementById('chat-modal');
+        const closeChatBtn = document.getElementById('close-chat-btn');
+        const chatHistory = document.getElementById('chat-history');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+
+        // --- STATE ---
+        let state = {
+            selectedBookIds: [],
+            uploadedFiles: [],
+            density: 'overview',
+            maxCards: FEED_LENGTHS[1], 
+            bookProgress: {},
+            feedQueue: [],
+            isLoading: false,
+            currentVisibleCard: null,
+        };
+        
+        const mathjaxScript = document.createElement('script');
+        mathjaxScript.src = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js";
+        mathjaxScript.async = true;
+        document.head.appendChild(mathjaxScript);
+        window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' }};
+
+        // --- FUNCTIONS ---
+        function initializeSetupScreen() {
+            bookSelectionContainer.innerHTML = '';
+            Object.entries(MOCK_BOOKS).forEach(([id, book]) => {
+                const bookEl = document.createElement('div');
+                bookEl.className = 'flex items-center p-4 border-2 border-gray-200 rounded-xl cursor-pointer transition-all duration-200';
+                bookEl.dataset.bookId = id;
+                bookEl.innerHTML = `
+                    <div class="w-12 h-16 ${book.color} rounded-lg mr-4 flex-shrink-0"></div>
+                    <div>
+                        <h3 class="font-bold text-left text-gray-800">${book.title}</h3>
+                        <p class="text-sm text-left text-gray-500">${book.author}</p>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 ml-auto text-gray-300 checkmark" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                `;
+                bookEl.addEventListener('click', () => toggleBookSelection(id));
+                bookSelectionContainer.appendChild(bookEl);
+            });
+            
+            densitySelector.querySelectorAll('.density-btn').forEach(btn => btn.addEventListener('click', () => setDensity(btn.dataset.density)));
+            setDensity(state.density); 
+            
+            feedLengthSlider.addEventListener('input', (e) => {
+                state.maxCards = FEED_LENGTHS[parseInt(e.target.value, 10)];
+            });
+
+            updateStartButtonState();
+        }
+
+        function setDensity(newDensity) {
+            state.density = newDensity;
+            densitySelector.querySelectorAll('.density-btn').forEach(btn => {
+                btn.classList.toggle('bg-white', btn.dataset.density === newDensity);
+                btn.classList.toggle('text-blue-600', btn.dataset.density === newDensity);
+                btn.classList.toggle('shadow', btn.dataset.density === newDensity);
+                btn.classList.toggle('text-gray-500', btn.dataset.density !== newDensity);
+            });
+        }
+
+        function toggleBookSelection(bookId) {
+            const el = bookSelectionContainer.querySelector(`[data-book-id='${bookId}']`);
+            const index = state.selectedBookIds.indexOf(bookId);
+
+            selectionError.textContent = '';
+            if (index > -1) {
+                state.selectedBookIds.splice(index, 1);
+                el.classList.remove('border-blue-500', 'bg-blue-50');
+                el.querySelector('.checkmark').classList.remove('text-blue-500');
+            } else {
+                if (state.selectedBookIds.length + state.uploadedFiles.length >= 6) {
+                    selectionError.textContent = 'You can select a maximum of 6 books.';
+                    return;
+                }
+                state.selectedBookIds.push(bookId);
+                el.classList.add('border-blue-500', 'bg-blue-50');
+                el.querySelector('.checkmark').classList.add('text-blue-500');
+            }
+            updateStartButtonState();
+        }
+
+        function handleFileUpload(event) {
+            const files = event.target.files;
+            if (!files) return;
+
+            if (state.selectedBookIds.length + state.uploadedFiles.length + files.length > 6) {
+                selectionError.textContent = 'You can select a maximum of 6 books.';
+                return;
+            }
+
+            for(const file of files) {
+                state.uploadedFiles.push(file);
+            }
+            
+            fileList.innerHTML = state.uploadedFiles.map(f => `<p class="truncate">✓ ${f.name}</p>`).join('');
+            updateStartButtonState();
+            
+            // In a real app, you would start processing these files here to send to a backend RAG system.
+            // For this prototype, we will just use the pre-loaded content.
+            console.log("Files selected:", state.uploadedFiles);
+            selectionError.textContent = "File upload is a demo. Using pre-loaded books.";
+        }
+
+
+        function updateStartButtonState() {
+            const count = state.selectedBookIds.length + state.uploadedFiles.length;
+            startReadingBtn.disabled = count === 0;
+            startReadingBtn.textContent = count > 0 ? `Read ${count} Item${count > 1 ? 's' : ''}` : 'Start Reading';
+        }
+
+        function startReading() {
+            if (state.selectedBookIds.length === 0 && state.uploadedFiles.length === 0) return;
+
+            // For this prototype, we'll only use the pre-selected mock books.
+            // A real implementation would process uploaded files and merge them here.
+            if(state.selectedBookIds.length === 0) {
+                selectionError.textContent = "Please select at least one pre-loaded book for this demo.";
+                return;
+            }
+
+            state.bookProgress = {};
+            state.selectedBookIds.forEach(id => {
+                state.bookProgress[id] = { currentChapter: 0, totalChapters: MOCK_BOOKS[id].chapters.length };
+            });
+
+            buildFeedQueue();
+            state.feedQueue = state.feedQueue.slice(0, state.maxCards); 
+
+            setupScreen.classList.add('hidden');
+            readerScreen.classList.remove('hidden');
+            readerScreen.classList.add('flex');
+            
+            renderProgressBars();
+            loadMoreCards(true);
+        }
+        
+        function renderProgressBars() {
+            progressBarsContainer.innerHTML = '';
+            state.selectedBookIds.forEach(id => {
+                const book = MOCK_BOOKS[id];
+                const progress = state.bookProgress[id];
+                const percentage = (progress.currentChapter / progress.totalChapters) * 100;
+                
+                const barEl = document.createElement('div');
+                barEl.dataset.bookId = id;
+                barEl.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <p class="text-xs font-semibold text-gray-600 truncate mr-2">${book.title}</p>
+                        <p class="text-xs text-gray-400">${progress.currentChapter}/${progress.totalChapters}</p>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5">
+                        <div class="progress-bar-fill ${book.color} h-1.5 rounded-full" style="width: ${percentage}%"></div>
+                    </div>
+                `;
+                progressBarsContainer.appendChild(barEl);
+            });
+        }
+        
+        function updateProgressBar(bookId) {
+            const barContainer = progressBarsContainer.querySelector(`[data-book-id='${bookId}']`);
+            if (!barContainer) return;
+            const progress = state.bookProgress[bookId];
+            const percentage = (progress.currentChapter / progress.totalChapters) * 100;
+            barContainer.querySelector('.progress-bar-fill').style.width = `${percentage}%`;
+            barContainer.querySelector('.text-gray-400').textContent = `${progress.currentChapter}/${progress.totalChapters}`;
+        }
+        
+        function buildFeedQueue() {
+            state.feedQueue = [];
+            let chapterPointers = {};
+            state.selectedBookIds.forEach(id => chapterPointers[id] = 0);
+
+            let booksWithChaptersLeft = [...state.selectedBookIds];
+            let bookIndex = 0;
+            
+            while(booksWithChaptersLeft.length > 0) {
+                const bookId = booksWithChaptersLeft[bookIndex];
+                const chapterIndex = chapterPointers[bookId];
+
+                if (MOCK_BOOKS[bookId] && MOCK_BOOKS[bookId].chapters[chapterIndex]) {
+                    state.feedQueue.push({ type: 'book', bookId, chapterIndex });
+                    chapterPointers[bookId]++;
+                } else {
+                    booksWithChaptersLeft.splice(bookIndex, 1);
+                    if (booksWithChaptersLeft.length > 0) bookIndex %= booksWithChaptersLeft.length;
+                    continue; 
+                }
+                if (booksWithChaptersLeft.length > 0) bookIndex = (bookIndex + 1) % booksWithChaptersLeft.length;
+            }
+
+            const engagementInterval = 4;
+            for (let i = state.feedQueue.length - engagementInterval; i > 0; i -= engagementInterval) {
+                const randomCard = ENGAGEMENT_CARDS[Math.floor(Math.random() * ENGAGEMENT_CARDS.length)];
+                state.feedQueue.splice(i, 0, randomCard);
+            }
+        }
+
+        function createCardElement(item) {
+            const card = document.createElement('div');
+            card.className = 'card w-full flex-shrink-0 flex items-center p-4';
+            
+            if (item.type === 'book') {
+                const book = MOCK_BOOKS[item.bookId];
+                const chapter = book.chapters[item.chapterIndex];
+                card.dataset.bookId = item.bookId;
+                
+                const cardContent = document.createElement('div');
+                cardContent.className = 'w-full bg-white border border-gray-200 rounded-2xl shadow-xl shadow-gray-300/20 p-6 flex flex-col transition-all duration-300';
+                const content = chapter[state.density] || chapter.overview;
+                const { summary, bullets } = content;
+                card.dataset.context = JSON.stringify({ book: book.title, chapter: chapter.title, summary, bullets });
+
+                cardContent.innerHTML = `
+                    <div class="mb-4">
+                        <p class="text-sm font-semibold text-blue-500">${book.title}</p>
+                        <h2 class="text-2xl md:text-3xl font-bold text-gray-900 mt-1">${chapter.title}</h2>
+                    </div>
+                    <div class="text-gray-600 space-y-4 text-base md:text-lg flex-grow">
+                        <p>${summary}</p>
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <h4 class="font-semibold text-gray-800 mb-2">${state.density === 'researcher' ? 'Key Constructs:' : 'Key Takeaways:'}</h4>
+                            <ul class="list-disc list-inside space-y-1 text-sm">
+                                ${bullets.map(b => `<li>${b}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>`;
+                card.appendChild(cardContent);
+            } else {
+                 card.innerHTML = `<div class="w-full ${item.color} rounded-2xl shadow-xl shadow-gray-300/20 p-6 flex flex-col items-center text-center transition-all duration-300">
+                        <h3 class="text-xl font-bold ${item.textColor} mb-4">${item.title}</h3>
+                        <p class="text-2xl md:text-3xl font-medium ${item.textColor}">${item.text}</p>
+                        ${item.type === 'quick_question' ? `<p class="mt-6 text-sm opacity-60 ${item.textColor}">(Answer: ${item.answer})</p>` : ''}
+                    </div>`;
+            }
+            return card;
+        }
+
+        let observer;
+        function setupIntersectionObserver() {
+            const options = { root: feed, rootMargin: '0px', threshold: 0.6 };
+            observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        state.currentVisibleCard = entry.target;
+                        if (entry.target.dataset.bookId) {
+                            const bookId = entry.target.dataset.bookId;
+                            const chapterIndex = parseInt(entry.target.dataset.chapterIndex, 10);
+                            const progress = state.bookProgress[bookId];
+                            if (progress && chapterIndex >= progress.currentChapter) {
+                                progress.currentChapter = chapterIndex + 1;
+                                updateProgressBar(bookId);
+                            }
+                        }
+                    }
+                });
+            }, options);
+        }
+        
+        function loadMoreCards(isInitial = false) {
+            if (state.isLoading || state.feedQueue.length === 0) return;
+            state.isLoading = true;
+            if(!isInitial) loadingIndicator.classList.remove('hidden');
+
+            setTimeout(() => {
+                const cardsToLoad = state.feedQueue.splice(0, 3);
+                cardsToLoad.forEach((item) => {
+                    const cardEl = createCardElement(item);
+                    if (item.type === 'book') cardEl.dataset.chapterIndex = item.chapterIndex;
+                    feed.appendChild(cardEl);
+                    observer.observe(cardEl);
+                });
+
+                if (window.MathJax && window.MathJax.typeset) window.MathJax.typeset();
+                loadingIndicator.classList.add('hidden');
+                state.isLoading = false;
+
+                if (state.feedQueue.length === 0) {
+                     const endMessage = document.createElement('p');
+                     endMessage.className = 'text-center text-gray-500 py-8';
+                     endMessage.textContent = 'You\'ve reached the end of your feed!';
+                     feed.appendChild(endMessage);
+                }
+            }, 500);
+        }
+        
+        function handleScroll() {
+            const { scrollTop, scrollHeight, clientHeight } = feed;
+            if (scrollHeight - scrollTop - clientHeight < 400) loadMoreCards();
+        }
+        
+        function resetToSetup() {
+            state = { selectedBookIds: [], uploadedFiles: [], density: 'overview', maxCards: FEED_LENGTHS[1], bookProgress: {}, feedQueue: [], isLoading: false, currentVisibleCard: null };
+            feed.innerHTML = '';
+            fileList.innerHTML = '';
+            if (observer) observer.disconnect();
+            readerScreen.classList.add('hidden');
+            readerScreen.classList.remove('flex');
+            setupScreen.classList.remove('hidden');
+            initializeSetupScreen();
+            setupIntersectionObserver();
+        }
+
+        // --- Interactive & AI Functions ---
+        function toggleChat(forceOpen = null) {
+            const isOpen = !chatModal.classList.contains('hidden');
+            if ((forceOpen === true && isOpen) || (forceOpen === false && !isOpen)) return;
+            if (isOpen) {
+                chatModal.classList.add('translate-y-full');
+                setTimeout(() => chatModal.classList.add('hidden'), 300);
+            } else {
+                chatModal.classList.remove('hidden');
+                setTimeout(() => chatModal.classList.remove('translate-y-full'), 10);
+            }
+        }
+
+        async function handleSendMessage(e) {
+            e.preventDefault();
+            const messageText = chatInput.value.trim();
+            if (!messageText) return;
+
+            const userMessage = document.createElement('div');
+            userMessage.className = 'flex justify-end';
+            userMessage.innerHTML = `<p class="bg-blue-500 text-white max-w-xs md:max-w-md px-4 py-2 rounded-2xl rounded-br-lg">${messageText}</p>`;
+            chatHistory.appendChild(userMessage);
+            chatInput.value = '';
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            const aiTypingIndicator = document.createElement('div');
+            aiTypingIndicator.id = 'typing-indicator';
+            aiTypingIndicator.className = 'flex justify-start';
+            aiTypingIndicator.innerHTML = `<div class="bg-gray-200 px-4 py-3 rounded-2xl rounded-bl-lg"><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
+            chatHistory.appendChild(aiTypingIndicator);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            
+            const contextData = state.currentVisibleCard?.dataset.context;
+            if (!contextData) {
+                displayAiResponse("Please scroll to a book card to ask a question about it.");
+                return;
+            }
+            const context = JSON.parse(contextData);
+            
+            const systemPrompt = "You are an expert tutor. Your role is to answer questions ONLY based on the provided context from a book summary. Do not use any external knowledge. Be concise and helpful. The context contains the book title, chapter title, a summary, and key bullet points.";
+            const userQuery = `CONTEXT:\n- Book: ${context.book}\n- Chapter: ${context.chapter}\n- Summary: ${context.summary}\n- Key Points: ${context.bullets.join(', ')}\n\nQUESTION: ${messageText}`;
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: userQuery }] }],
+                        systemInstruction: { parts: [{ text: systemPrompt }] },
+                    })
+                });
+                if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "I'm sorry, I couldn't generate a response.";
+                displayAiResponse(text);
+            } catch (error) {
+                console.error("AI Fetch Error:", error);
+                displayAiResponse("Sorry, there was an error connecting to the AI. Please try again.");
+            }
+        }
+
+        function displayAiResponse(text) {
+            const aiTypingIndicator = document.getElementById('typing-indicator');
+            if (aiTypingIndicator) aiTypingIndicator.remove();
+            
+            const aiMessage = document.createElement('div');
+            aiMessage.className = 'flex justify-start';
+            aiMessage.innerHTML = `<p class="bg-gray-200 text-gray-800 max-w-xs md:max-w-md px-4 py-2 rounded-2xl rounded-bl-lg">${text}</p>`;
+            chatHistory.appendChild(aiMessage);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        function toggleTalkMode() {
+            talkBtn.classList.toggle('is-listening');
+            setTimeout(() => talkBtn.classList.remove('is-listening'), 2000);
+        }
+
+        function playAudioForCurrentCard() {
+             if (!state.currentVisibleCard) return;
+             document.querySelectorAll('.is-playing').forEach(el => el.classList.remove('is-playing'));
+             const cardContent = state.currentVisibleCard.children[0];
+             if (cardContent) cardContent.classList.add('is-playing');
+        }
+
+        // --- Event Listeners ---
+        startReadingBtn.addEventListener('click', startReading);
+        feed.addEventListener('scroll', handleScroll);
+        changeBooksBtn.addEventListener('click', resetToSetup);
+        chatBtn.addEventListener('click', () => toggleChat(true));
+        closeChatBtn.addEventListener('click', () => toggleChat(false));
+        chatForm.addEventListener('submit', handleSendMessage);
+        talkBtn.addEventListener('click', toggleTalkMode);
+        audioModeBtn.addEventListener('click', playAudioForCurrentCard);
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileUpload);
+
+        // --- Initial Load ---
+        initializeSetupScreen();
+        setupIntersectionObserver();
+    </script>
+</body>
+</html>
+
