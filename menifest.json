@@ -1,0 +1,21 @@
+{
+"name": "Insta-Reader",
+"short_name": "InstaReader",
+"start_url": "/index.html",
+"display": "standalone",
+"background_color": "#f9fafb",
+"theme_color": "#ffffff",
+"description": "A card-based reading app to make reading faster and addictive.",
+"icons": [
+{
+"src": "https://www.google.com/search?q=https://placehold.co/192x192/3b82f6/ffffff%3Ftext%3DIR",
+"sizes": "192x192",
+"type": "image/png"
+},
+{
+"src": "https://www.google.com/search?q=https://placehold.co/512x512/3b82f6/ffffff%3Ftext%3DIR",
+"sizes": "512x512",
+"type": "image/png"
+}
+]
+}
